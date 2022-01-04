@@ -1,0 +1,9 @@
+# ignore all files and subfolders
+*
+*/
+
+# except these files
+!.gitignore
+!glaser.py
+!main.py
+!LICENCE.md

@@ -82,12 +82,12 @@ class Glaser():
     def calc_dv(Te):
         dv = []
         for Te_val in Te:
-            if Te < 5.0:
+            if Te_val < 5.0:
                 dv.append(0.005)
-            elif Te > 15.0:
+            elif Te_val > 15.0:
                 dv.append(0.002)
             else:
-                dv.append((6.5 - 0.3*Te) / 1000.0)
+                dv.append((6.5 - 0.3*Te_val) / 1000.0)
         dv = np.array(dv)
         return(dv)
     
@@ -186,28 +186,58 @@ class Glaser():
 
 
     def calc_Ti(self, arg1):
-        if arg1 == 'Ti_const_21':
-            Ti = 21.0 * np.ones(self.Te.shape)
         
-        elif arg1 == 'Ti_const_18':
-            Ti = 18.0 * np.ones(self.Te.shape)
+        if type(arg1) == str:
             
+            if arg1 == 'Ti_const_21':
+                Ti = 21.0 * np.ones(self.Te.shape)
+            
+            elif arg1 == 'Ti_const_18':
+                Ti = 18.0 * np.ones(self.Te.shape)
+            
+            elif arg1 == 'Ti_ISO13788':
+                xp = (-20.0, 10.0, 20.0, 30.0)
+                fp = (20.0, 20.0, 25.0, 25.0)
+                Ti = np.interp(self.Te, xp, fp)
+            else:
+                print('Unknown Ti arg1')
+                Ti = np.nan
+            
+            return(Ti)
+        
         else:
-            print('Unknown Ti arg1')
-            Ti = np.nan
-        return(Ti)
+            # It is assumed here that arg1 already contains the actual Ti data
+            return(arg1)
+        
     
     
 
     def calc_vi(self, arg1):
-        if arg1 == 'RIL107_2012':
-            vi = self.ve + self.calc_dv(self.Te)
-        elif arg1 == 'RHi_const_50':
-            vi = (50.0/100.0) * self.calc_vsat( self.Ti )
+        
+        if type(arg1) == str:
+        
+            if arg1 == 'RIL107_2012':
+                vi = self.ve + self.calc_dv(self.Te)
+                
+            elif arg1 == 'RHi_const_50':
+                vi = (50.0/100.0) * self.calc_vsat( self.Ti )
+                
+            elif arg1 == 'RHi_ISO13788':
+                xp = (-20.0, -10.0, 20.0, 30.0)
+                fp = (40.0, 40.0, 70.0, 70.0)
+                RHi = np.interp(self.Te, xp, fp)
+                vi = (RHi/100.0) * self.calc_vsat( self.Ti )
+            else:
+                print('Unknown arg1!')
+                vi = np.nan
+            
+            return(vi)
+        
         else:
-            print('Unknown arg1!')
-            vi = np.nan
-        return(vi)
+            # It is assumed here that arg1 already contains the actual vi data
+            return(arg1)
+        
+        
 
 
     @staticmethod
@@ -311,6 +341,7 @@ class Glaser():
                 self.RHmax[idx] = phin[self.interface_idxs].max()
                 
                 
+                
                 # mould growth potential at material interfaces
                 T_M = Tn[self.interface_idxs]
                 phi_M = phin[self.interface_idxs]
@@ -340,7 +371,9 @@ class Glaser():
                 g_out = self.delta_v_air * (dv_exterior / sd_exterior)
                 
                 dv_interior = vi - v_interior_border
+                #print('sd_cum', self.sd_cum, flush=True)
                 sd_interior = self.sd_cum[-1] - self.sd_cum[idx_interior_border]
+                # print('sd_interior:', sd_interior)
                 g_in = self.delta_v_air * (dv_interior / sd_interior)
                 
                 self.gcond[idx] = (g_in - g_out) * dt * 1000.0
@@ -354,7 +387,7 @@ class Glaser():
                 # condensation region
                 vn_limited = vn.copy()
                 vn_limited[idx_exterior_border:idx_interior_border] \
-                    = vn[idx_exterior_border:idx_interior_border]
+                    = vsatn[idx_exterior_border:idx_interior_border]
                 
                 # exterior side
                 sd_vals = self.sd_cum[:idx_exterior_border]
@@ -368,9 +401,8 @@ class Glaser():
                 
                 
                 # relative humidity
-                phin_limited = vn_limited / vsatn
+                phin_limited = 100.0 * (vn_limited / vsatn)
                 self.RHmax[idx] = phin_limited[self.interface_idxs].max()
-                
                                 
                 # mould growth potential at material interfaces                
                 T_M = Tn[self.interface_idxs]

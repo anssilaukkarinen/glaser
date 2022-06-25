@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 class Glaser():
     
-    def __init__(self, layers_list_input, BC_dict_input):
+    def __init__(self, layers_list_input, BC_dict_input, n=50):
         
         ## constants
         # Surface resistances
@@ -22,6 +22,8 @@ class Glaser():
         
         self.dsurf = 0.05
         self.R_layer_max = 0.05
+        
+        self.n = n
         
         self.delta_v_air = 0.000025
         
@@ -44,6 +46,10 @@ class Glaser():
         self.dv_tot = self.vi - self.ve
         
         self.dt_hours = BC_dict_input['dt_hours']
+        
+        # print('Te', self.Te)
+        # print('RHe', self.RHe)
+        # print('ve', self.ve)
         
         
         
@@ -143,17 +149,15 @@ class Glaser():
                 lam = d / R
                 mu = layer['sd'] / d
             
-            n = 50
-            
             # create a list of resistances
-            for idx in range(n):
-                self.layers_list_d.append(d/n)
-                self.layers_list_R.append((d/n) / lam)
-                self.layers_list_sd.append((d/n) * mu)
+            for idx in range(self.n):
+                self.layers_list_d.append(d/self.n)
+                self.layers_list_R.append((d/self.n) / lam)
+                self.layers_list_sd.append((d/self.n) * mu)
             
             # create a list of interface indexis for mould growth risk calculation
             # the last round is for interior surface, which is included
-            self.interface_idxs.append(1 + (idx_layer+1) * n)
+            self.interface_idxs.append(1 + (idx_layer+1) * self.n)
             
             # determine single interface index for evaporation calculation
             if 'evap_layer' in layer.keys():
@@ -308,12 +312,18 @@ class Glaser():
             #           self.RHe[idx].round(1),
             #           phin.max().round(1))
             
+            # print('Tn', Tn.round(1))
+            self.Tn = Tn
+            self.vsatn = vsatn
+            self.phin = phin
             
             
             # Go through relative humidity values and see, if there is condensation
             list_condensation_ranges = self.func_list_condensation_ranges(phin)
+            n_cond_ranges = len(list_condensation_ranges)
             
-            n_cond_ranges = len(list_condensation_ranges)            
+            # print('list_cond_ranges', list_condensation_ranges)
+            # print('n_cond_ranges', n_cond_ranges)
             
             ##
             if n_cond_ranges == 0:
@@ -378,6 +388,10 @@ class Glaser():
                 
                 self.gcond[idx] = (g_in - g_out) * dt * 1000.0
                 
+                # print('g_in, g_out', 
+                #       (g_in*dt*1000.0).round(1),
+                #       (g_out*dt*1000.0).round(1))
+                
                 # amount of evaporation
                 self.gevap[idx] = 0.0
                 #print('g_cond_net =', self.gcond[idx].round(1), 'g/m2')
@@ -391,8 +405,18 @@ class Glaser():
                 
                 # exterior side
                 sd_vals = self.sd_cum[:idx_exterior_border]
-                vn_limited[:idx_exterior_border] \
-                    = ve + (sd_vals/sd_vals[-1]) * dv_exterior
+                if sd_vals[-1] == 0.0:
+                    vn_limited[:idx_exterior_border] = ve
+                elif sd_vals[-1] > 0.0:
+                    vn_limited[:idx_exterior_border] \
+                        = ve + (sd_vals/sd_vals[-1]) * dv_exterior
+                else:
+                    print('something strange, in the neighbourhood')
+                    vn_limited[:idx_exterior_border] = 'false'
+                
+                # print('ve', ve.round(5))
+                # print('sd_vals', sd_vals)
+                # print('dv_exterior', dv_exterior)
                 
                 # interior side
                 sd_vals = self.sd_cum[idx_interior_border:] - self.sd_cum[idx_interior_border]

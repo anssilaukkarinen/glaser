@@ -111,6 +111,8 @@ layers_list_bmwb = [{'d':0.13,
                 'mu': 16}]
 
 
+n_layers = 2
+
 
 #########################################
 
@@ -118,16 +120,18 @@ layers_list_bmwb = [{'d':0.13,
 
 
 ll_names = [layers_list_name_tfwn,
-           layers_list_name_tfwo,
-           layers_list_name_lwii,
-           layers_list_name_csp,
-           layers_list_name_bmwb]
-
+            layers_list_name_tfwo,
+            layers_list_name_lwii,
+            layers_list_name_csp,
+            layers_list_name_bmwb]
 ll_s = [layers_list_tfwn,
-           layers_list_tfwo,
-           layers_list_lwii,
-           layers_list_csp,
-           layers_list_bmwb]
+            layers_list_tfwo,
+            layers_list_lwii,
+            layers_list_csp,
+            layers_list_bmwb]
+
+# ll_names = [layers_list_name_lwii]
+# ll_s = [layers_list_lwii]
 
 Tis = ['Ti_const_21', 'Ti_const_18', 'Ti_ISO13788']
 
@@ -189,7 +193,8 @@ for ll_idx in range(len(ll_names)):
                           'dt_hours': dt_hours}
                     
                     obj = glaser.Glaser(ll_s[ll_idx],
-                                        BC)
+                                        BC,
+                                        n_layers)
                     obj_list.append(obj)
                     mcond_list.append(obj.mcond)
                     mevap_list.append(obj.mevap)

@@ -130,24 +130,50 @@ layers_list_bmwb = [{'d':0.13,
                 'lam': 0.6,
                 'mu': 16}]
 
+layers_list_name_biserni = 'biserni'
+layers_list_biserni = [{'d':0.015,
+                        'lam': 0.9,
+                        'mu': (1.85e-10)/(1.2e-11)},
+                       {'d': 0.02,
+                        'lam': 0.038,
+                        'mu': (1.85e-10)/(1.5e-10),
+                        'evap_layer': True},
+                        {'d':0.2,
+                        'lam': 0.47,
+                        'mu': (1.85e-10)/(3.6e-11)},
+                        {'d':0.015,
+                        'lam': 0.7,
+                        'mu': (1.85e-10)/(1.8e-11)}]
 
 
-layers_list_names = [layers_list_name_tfwn,
-           layers_list_name_tfwo,
-           layers_list_name_lwii,
-           layers_list_name_csp,
-           layers_list_name_bmwb]
+layers_list_name_MW = 'MW_only'
+layers_list_MW = [{'d': 0.2,
+                   'lam': 0.035,
+                   'mu': 1.0,
+                   'evap_layer': True}]
 
-layers_list_dicts = [layers_list_tfwn,
-                    layers_list_tfwo,
-                    layers_list_lwii,
-                    layers_list_csp,
-                    layers_list_bmwb]
+
+
+# layers_list_names = [layers_list_name_tfwn,
+#            layers_list_name_tfwo,
+#            layers_list_name_lwii,
+#            layers_list_name_csp,
+#            layers_list_name_bmwb]
+
+# layers_list_dicts = [layers_list_tfwn,
+#                     layers_list_tfwo,
+#                     layers_list_lwii,
+#                     layers_list_csp,
+#                     layers_list_bmwb]
+
+layers_list_names = [layers_list_name_MW]
+
+layers_list_dicts = [layers_list_MW]
 
 
 # Indoor air conditions
 
-Tis = ['Ti_const_18'] # ['Ti_const_21', 'Ti_const_18', 'Ti_ISO13788']
+Tis = ['Ti_const_21'] # ['Ti_const_21', 'Ti_const_18', 'Ti_ISO13788']
 
 vis = ['RIL107_2012'] # ['RHi_const_50', 'RIL107_2012', 'RHi_ISO13788']
 
@@ -160,7 +186,8 @@ for idx_ll in range(len(layers_list_names)):
         
         for vi in vis:
             
-            for key in data.keys():
+            # for key in data.keys():
+            for key in ['Jyv']:
                 
                 
                 BC = {'Te': data[key].loc[:, 'Te'].values,
@@ -171,7 +198,7 @@ for idx_ll in range(len(layers_list_names)):
                 
                 obj = glaser.Glaser(layers_list_dicts[idx_ll],
                                     BC,
-                                    2)
+                                    20)
                 
                 
                 res_key = '{}_{}_{}_{}'.format(layers_list_names[idx_ll],
@@ -184,13 +211,29 @@ for idx_ll in range(len(layers_list_names)):
 
 
 
+## Print and plot results
+idx_month = 0
+key = [x for x in res.keys() if 'Jyv' in x][idx_month]
+print('mcond:', res[key].mcond.round(1), 'g/m2')
+print('mcond_v2:', res[key].mcond_v2.round(1), 'g/m2')
+
+
+fig, ax = plt.subplots()
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['Tn'], '-o')
+
+
+fig, ax = plt.subplots()
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['vsatn'])
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['vn0'], '--.')
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['vn_limited'], '-.')
+ax.legend(['vsatn', 'vn0', 'vn_limited'])
 
 
 
-
-
-
-
+fig, ax = plt.subplots()
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['phin0'], '-o')
+ax.plot(res[key].d_cum, res[key].res_monthly[idx_month]['phin_limited'], '-o')
+ax.grid(True)
 
 
 

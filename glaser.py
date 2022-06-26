@@ -3,15 +3,19 @@
 Created on Tue Jan  4 11:19:02 2022
 
 @author: laukkara
-"""
 
+Is the dew point created at the closest calculation interface or at the
+interface with biggest difference between vapor pressure and saturation
+vapor pressure?
+"""
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 class Glaser():
     
-    def __init__(self, layers_list_input, BC_dict_input, n=50):
+    def __init__(self, layers_list_input, BC_dict_input, n=5):
         
         ## constants
         # Surface resistances
@@ -21,7 +25,6 @@ class Glaser():
         self.sdsi = 0.0
         
         self.dsurf = 0.05
-        self.R_layer_max = 0.05
         
         self.n = n
         
@@ -41,9 +44,10 @@ class Glaser():
         
         self.Ti = self.calc_Ti(BC_dict_input['Ti'])
         self.vi = self.calc_vi(BC_dict_input['vi'])
+        self.RHi = 100.0 * self.vi / self.calc_vsat(self.Ti)
         
-        self.dT_tot = self.Ti - self.Te
-        self.dv_tot = self.vi - self.ve
+        # self.dT_tot = self.Ti - self.Te
+        # self.dv_tot = self.vi - self.ve
         
         self.dt_hours = BC_dict_input['dt_hours']
         
@@ -185,8 +189,8 @@ class Glaser():
         self.sd_cum = np.concatenate( (np_zero_array,
                                        np.cumsum( self.layers_list_sd )) )
         
-        self.R_tot = self.R_cum[-1]
-        self.sd_tot = self.sd_cum[-1]
+        # self.R_tot = self.R_cum[-1]
+        # self.sd_tot = self.sd_cum[-1]
 
 
     def calc_Ti(self, arg1):
@@ -281,15 +285,21 @@ class Glaser():
 
 
 
-
     def main(self):
         
         self.gcond = np.zeros(self.Te.shape)
+        self.gcond_v2 = np.zeros(self.Te.shape)
         self.gevap = np.zeros(self.Te.shape)
         self.RHmax = np.zeros(self.Te.shape)
         self.mpotmax = np.zeros(self.Te.shape)
         
+        self.res_monthly = []
+        
         for idx, Te_val in enumerate(self.Te):
+            
+            print('idx:', idx, 'Te_val:', Te_val)
+            
+            res_dummy = {}
             
             Te = self.Te[idx]
             ve = self.ve[idx]
@@ -303,27 +313,23 @@ class Glaser():
             # Temperature and saturation concentration
             Tn = Te + (self.R_cum/self.R_cum[-1]) * dT_tot
             vsatn = self.calc_vsat(Tn)
+            res_dummy['Tn'] = Tn
+            res_dummy['vsatn'] = vsatn
             
             ## Vapor concentration and relative humidity
             # Round 1
             vn = ve + (self.sd_cum/self.sd_cum[-1]) * dv_tot
             phin = 100.0 * (vn / vsatn)
-            # print(idx, self.Te[idx].round(1),
-            #           self.RHe[idx].round(1),
-            #           phin.max().round(1))
-            
-            # print('Tn', Tn.round(1))
-            self.Tn = Tn
-            self.vsatn = vsatn
-            self.phin = phin
+            res_dummy['vn0'] = vn
+            res_dummy['phin0'] = phin
             
             
             # Go through relative humidity values and see, if there is condensation
             list_condensation_ranges = self.func_list_condensation_ranges(phin)
             n_cond_ranges = len(list_condensation_ranges)
+            res_dummy['n_cond_ranges'] = n_cond_ranges
             
-            # print('list_cond_ranges', list_condensation_ranges)
-            # print('n_cond_ranges', n_cond_ranges)
+            
             
             ##
             if n_cond_ranges == 0:
@@ -332,8 +338,8 @@ class Glaser():
                 self.gcond[idx] = 0.0
                 
                 # amount of evaporation
-                T_evap = Tn[self.idx_evap_layer]
-                v_sat_evap = self.calc_vsat(T_evap)
+                # T_evap = Tn[self.idx_evap_layer]
+                v_sat_evap = vsatn[self.idx_evap_layer]
 
                 dv_interior = vi - v_sat_evap
                 sd_interior = self.sd_cum[-1] - self.sd_cum[self.idx_evap_layer]
@@ -366,60 +372,52 @@ class Glaser():
             
             
             elif n_cond_ranges == 1:                
-                # There is only one condensation range in the structure
-
-                # amount of condensation
-                idxs_phi_high = phin > 100.0
-                idx_exterior_border = idxs_phi_high.argmax()
-                idx_interior_border = (idxs_phi_high.shape[0] - 1) - idxs_phi_high[::-1].argmax()
-                
-                v_exterior_border = self.calc_vsat(Tn[idx_exterior_border])
-                v_interior_border = self.calc_vsat(Tn[idx_interior_border])
-                
-                dv_exterior = v_exterior_border - ve
-                sd_exterior = self.sd_cum[idx_exterior_border]
-                g_out = self.delta_v_air * (dv_exterior / sd_exterior)
-                
-                dv_interior = vi - v_interior_border
-                #print('sd_cum', self.sd_cum, flush=True)
-                sd_interior = self.sd_cum[-1] - self.sd_cum[idx_interior_border]
-                # print('sd_interior:', sd_interior)
-                g_in = self.delta_v_air * (dv_interior / sd_interior)
-                
-                self.gcond[idx] = (g_in - g_out) * dt * 1000.0
-                
-                # print('g_in, g_out', 
-                #       (g_in*dt*1000.0).round(1),
-                #       (g_out*dt*1000.0).round(1))
                 
                 # amount of evaporation
                 self.gevap[idx] = 0.0
-                #print('g_cond_net =', self.gcond[idx].round(1), 'g/m2')
                 
                 
-                # update vapor concentration
+                # There is only one condensation range in the structure
+                # First the vapor concentration is updated
+                
+                idxs_phi_high = phin > 100.0
+                # print('x1', Te_val, idxs_phi_high)
+                
+                # When there are multiple occurrences of maximum values,
+                # the index for the first occurrence is returned (numpy docs)
+                idx_exterior_border = idxs_phi_high.argmax()
+                idx_interior_border = idxs_phi_high.shape[0] - idxs_phi_high[::-1].argmax() - 1
+                
+                
                 # condensation region
                 vn_limited = vn.copy()
-                vn_limited[idx_exterior_border:idx_interior_border] \
-                    = vsatn[idx_exterior_border:idx_interior_border]
+                vn_limited[idx_exterior_border:(idx_interior_border+1)] \
+                    = vsatn[idx_exterior_border:(idx_interior_border+1)]
+                
                 
                 # exterior side
+                v_exterior_border = vsatn[idx_exterior_border]
+                
+                dv_exterior = v_exterior_border - ve
+                
                 sd_vals = self.sd_cum[:idx_exterior_border]
+                
                 if sd_vals[-1] == 0.0:
                     vn_limited[:idx_exterior_border] = ve
                 elif sd_vals[-1] > 0.0:
                     vn_limited[:idx_exterior_border] \
                         = ve + (sd_vals/sd_vals[-1]) * dv_exterior
                 else:
-                    print('something strange, in the neighbourhood')
-                    vn_limited[:idx_exterior_border] = 'false'
+                    sys.exit('something strange, in the neighbourhood')
                 
-                # print('ve', ve.round(5))
-                # print('sd_vals', sd_vals)
-                # print('dv_exterior', dv_exterior)
                 
                 # interior side
+                v_interior_border = vsatn[idx_interior_border]
+                
+                dv_interior = vi - v_interior_border
+                
                 sd_vals = self.sd_cum[idx_interior_border:] - self.sd_cum[idx_interior_border]
+                
                 vn_limited[idx_interior_border:] \
                     = v_interior_border + (sd_vals/sd_vals[-1]) * dv_interior
                 
@@ -427,6 +425,10 @@ class Glaser():
                 # relative humidity
                 phin_limited = 100.0 * (vn_limited / vsatn)
                 self.RHmax[idx] = phin_limited[self.interface_idxs].max()
+                
+                res_dummy['vn_limited'] = vn_limited
+                res_dummy['vsatn'] = vsatn
+                res_dummy['phin_limited'] = phin_limited
                                 
                 # mould growth potential at material interfaces                
                 T_M = Tn[self.interface_idxs]
@@ -436,14 +438,68 @@ class Glaser():
                 m_pot = phi_M / phi_M_min
                 # print(m_pot.round(2))
                 self.mpotmax[idx] = m_pot.max()
+
                 
-            
+
+
+
+                # The amount of condensation
+                
+                # Version 1
+                sd_exterior = self.sd_cum[idx_exterior_border]
+                g_out = self.delta_v_air * (dv_exterior / sd_exterior)
+                
+                sd_interior = self.sd_cum[-1] - self.sd_cum[idx_interior_border]
+                g_in = self.delta_v_air * (dv_interior / sd_interior)
+                
+                self.gcond[idx] = (g_in - g_out) * dt * 1000.0
+                
+                
+                # Version 2
+                g_in_all = self.delta_v_air \
+                            * (vn_limited[3:-1] - vn_limited[2:-2]) \
+                            / (self.sd_cum[3:-1] - self.sd_cum[2:-2])
+                
+                g_out_all = self.delta_v_air \
+                            * (vn_limited[2:-2] - vn_limited[1:-3]) \
+                            / (self.sd_cum[2:-2] - self.sd_cum[1:-3])
+                
+                g_cond_net = g_in_all - g_out_all
+                print((g_cond_net*dt*1000).round(2))
+                
+                self.gcond_v2[idx] = g_cond_net[g_cond_net>0.0].sum() * dt * 1000.0
+                
+                # print(g_cond_net.sum()*dt*1000.0)
+                
+                
+                
+                
+                
+                
+                
+                
+                # print('sd_cum', self.sd_cum, flush=True)
+                # print('sd_interior:', sd_interior)
+                
+                # print('g_in, g_out', 
+                #       (g_in*dt*1000.0).round(1),
+                #       (g_out*dt*1000.0).round(1))
+                
+                #print('g_cond_net =', self.gcond[idx].round(1), 'g/m2')
+                
+                # print('ve', ve.round(5))
+                # print('sd_vals', sd_vals)
+                # print('dv_exterior', dv_exterior)
+                
             else:
                 print('number of condensation ranges per structure:', n_cond_ranges)
+            
+            self.res_monthly.append(res_dummy)
 
                 
                 
         self.mcond = self.gcond.sum()
+        self.mcond_v2 = self.gcond_v2.sum()
         self.mevap = self.gevap.sum()
         self.RHmaxq100 = np.quantile(self.RHmax, 1.0)
         self.RHmaxq90 = np.quantile(self.RHmax, 0.9)
